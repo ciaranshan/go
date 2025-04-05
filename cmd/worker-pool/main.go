@@ -54,12 +54,9 @@ func processRecords(records [][]string) {
 		close(resultChan)
 	}()
 
-	var result []Result
 	for r := range resultChan {
-		result = append(result, r)
+		fmt.Printf("Worker %d: URL: %s, Status: %d, Response Time: %d ms\n", r.WorkerID, r.URL, r.Status, r.ResponseTime)
 	}
-
-	fmt.Println(result)
 }
 
 func main() {
