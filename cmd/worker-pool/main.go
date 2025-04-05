@@ -34,25 +34,14 @@ func doWork(id int, n string) Result {
 	defer resp.Body.Close()
 	responseTime := time.Since(startTime).Milliseconds()
 	return Result{
-		WorkerID: id,
-		URL:      n,
-		Status:   resp.StatusCode,
+		WorkerID:     id,
+		URL:          n,
+		Status:       resp.StatusCode,
 		ResponseTime: responseTime,
 	}
 }
 
-func main() {
-	f, err := os.Open("websites.csv")
-	if err != nil {
-		panic(err)
-	}
-	r4 := bufio.NewReader(f)
-	r := csv.NewReader(r4)
-	records, err := r.ReadAll()
-	if err != nil {
-		panic(err)
-	}
-
+func processRecords(records [][]string) {
 	jobs := make(chan string, 100)
 	results := make(chan Result, 100)
 
@@ -69,4 +58,19 @@ func main() {
 		res := <-results
 		fmt.Printf("Worker %d finished with URL %s and status %d in %d ms\n", res.WorkerID, res.URL, res.Status, res.ResponseTime)
 	}
+}
+
+func main() {
+	f, err := os.Open("websites.csv")
+	if err != nil {
+		panic(err)
+	}
+	r4 := bufio.NewReader(f)
+	r := csv.NewReader(r4)
+	records, err := r.ReadAll()
+	if err != nil {
+		panic(err)
+	}
+
+	processRecords(records)
 }
