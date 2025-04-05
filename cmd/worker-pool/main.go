@@ -2,22 +2,43 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha256"
 	"encoding/csv"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 )
 
-func worker(id int, jobs <-chan string, results chan<- [32]byte) {
+type Result struct {
+	WorkerID     int
+	URL          string
+	Status       int
+	ResponseTime int64
+}
+
+func worker(id int, jobs <-chan string, results chan<- Result) {
 	for j := range jobs {
-		results <- doWork(j)
+		results <- doWork(id, j)
 	}
 }
 
-func doWork(n string) [32]byte {
-	fmt.Printf("Worker %s started\n", n)
-	data := fmt.Appendf(nil, "payload-%s", n)
-	return sha256.Sum256(data) //
+func doWork(id int, n string) Result {
+	startTime := time.Now()
+	resp, err := http.Get(n)
+	if err != nil {
+		return Result{
+			WorkerID: id,
+			URL:      n,
+		}
+	}
+	defer resp.Body.Close()
+	responseTime := time.Since(startTime).Milliseconds()
+	return Result{
+		WorkerID: id,
+		URL:      n,
+		Status:   resp.StatusCode,
+		ResponseTime: responseTime,
+	}
 }
 
 func main() {
@@ -33,7 +54,7 @@ func main() {
 	}
 
 	jobs := make(chan string, 100)
-	results := make(chan [32]byte, 100)
+	results := make(chan Result, 100)
 
 	for w := 1; w <= 5; w++ {
 		go worker(w, jobs, results)
@@ -45,6 +66,7 @@ func main() {
 	close(jobs)
 
 	for a := 1; a <= len(records); a++ {
-		<-results
+		res := <-results
+		fmt.Printf("Worker %d finished with URL %s and status %d in %d ms\n", res.WorkerID, res.URL, res.Status, res.ResponseTime)
 	}
 }
