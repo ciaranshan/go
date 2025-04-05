@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -16,48 +17,49 @@ type Result struct {
 	ResponseTime int64
 }
 
-func worker(id int, jobs <-chan string, results chan<- Result) {
-	for j := range jobs {
-		results <- doWork(id, j)
-	}
-}
+func doWork(id int, url string, wg *sync.WaitGroup, resultChan chan<- Result) {
+	defer wg.Done()
 
-func doWork(id int, n string) Result {
 	startTime := time.Now()
-	resp, err := http.Get(n)
+	resp, err := http.Get(url)
 	if err != nil {
-		return Result{
+		resultChan <- Result{
 			WorkerID: id,
-			URL:      n,
+			URL:      url,
 		}
+		return
 	}
 	defer resp.Body.Close()
 	responseTime := time.Since(startTime).Milliseconds()
-	return Result{
+	resultChan <- Result{
 		WorkerID:     id,
-		URL:          n,
+		URL:          url,
 		Status:       resp.StatusCode,
 		ResponseTime: responseTime,
 	}
 }
 
 func processRecords(records [][]string) {
-	jobs := make(chan string, 100)
-	results := make(chan Result, 100)
+	var wg sync.WaitGroup
 
-	for w := 1; w <= 5; w++ {
-		go worker(w, jobs, results)
+	resultChan := make(chan Result)
+
+	for i, record := range records {
+		wg.Add(1)
+		go doWork(i, record[0], &wg, resultChan)
 	}
 
-	for _, record := range records {
-		jobs <- record[0]
-	}
-	close(jobs)
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
 
-	for a := 1; a <= len(records); a++ {
-		res := <-results
-		fmt.Printf("Worker %d finished with URL %s and status %d in %d ms\n", res.WorkerID, res.URL, res.Status, res.ResponseTime)
+	var result []Result
+	for r := range resultChan {
+		result = append(result, r)
 	}
+
+	fmt.Println(result)
 }
 
 func main() {
